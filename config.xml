@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+	id="http://codventure.org/StressWatchApp" version="1.0.0" viewmodes="maximized">
+	<tizen:application id="qHBb1UCMJh.StressWatchApp"
+		package="qHBb1UCMJh" required_version="4.0" />
+
+	<content src="index.html" />
+	<icon src="icon.png" />
+	<name>Stress Watch App</name>
+	<feature name="http://tizen.org/feature/screen.size.all" />
+	<tizen:profile name="wearable" />
+
+
+	<tizen:setting background-support="enable" encryption="disable" hwkey-event="enable" />
+	<tizen:privilege name="http://developer.samsung.com/privilege/medicalinfo" />
+	<tizen:privilege name="http://tizen.org/privilege/application.launch" />
+	<tizen:privilege name="http://tizen.org/privilege/unlimitedstorage" />
+	<tizen:privilege name="http://tizen.org/privilege/filesystem.write" />
+	<tizen:privilege name="http://tizen.org/privilege/filesystem.read" />
+	<tizen:privilege name="http://tizen.org/privilege/content.write" />
+	<tizen:privilege name="http://tizen.org/privilege/content.read" />
+	<tizen:privilege name="http://tizen.org/privilege/mediastorage" />
+	<tizen:privilege name="http://tizen.org/privilege/healthinfo" />
+	<tizen:privilege name="http://tizen.org/privilege/location" />
+	<tizen:privilege name="http://tizen.org/privilege/power" />
+
+	<feature name="http://tizen.org/feature/sensor.heart_rate_monitor" />
+</widget>
