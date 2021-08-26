@@ -1,40 +1,28 @@
+// variables
+const BACKUP_CHECK_DELAY = 60000;
+var timestamp = new Date().getTime();
+var rrIntervalFilename = 'rrInterval.csv', rrIntervalDataSource = 41, rrIntervalLastSyncTimestamp = timestamp;
+var ppgFilename = 'ppgLightIntensity.csv', ppgDataSource = 43, ppgLastSyncTimestamp = timestamp;
+var accelerometerFilename = 'accelerometer.csv', accelerometerDataSource = 42, accelerometerLastSyncTimestamp = timestamp;
+var uploading = false;
+
+// init
 window.onload = function() {
 	document.addEventListener('tizenhwkey', function(e) {
 		if (e.keyName == "back")
 			tizen.application.getCurrentApplication().hide();
 	});
 
-	// bind views
-	statusText = document.getElementById("status_text");
-	localDataSizeText = document.getElementById("local_data_size_text");
+	// acquire permissions and start data collection
+	tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage", function() {
+		tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) { });
+	}, function(error) { });
 
 	// hold the CPU lock
 	tizen.power.request("CPU", "CPU_AWAKE");
 	tizen.power.request("SCREEN", "SCREEN_NORMAL");
-
-	// acquire permissions and start data collection
-	tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage",
-			function() {
-				tizen.ppm.requestPermission(
-						"http://tizen.org/privilege/healthinfo", function() {
-							tizen.filesystem.resolve("documents",
-									function(dir) {
-										documentsDir = dir;
-										bindFilestreams();
-										startSensing();
-										// console.log('sensing started');
-									}, function(error) {
-										// console.log('resolve error : ' +
-										// error.message);
-									}, "rw");
-						}, function(error) {
-							// console.log('resolve permission error : ' +
-							// error.message);
-						});
-			}, function(error) {
-				// console.log('resolve permission error : ' + error.message);
-			});
-
+	
+	// keep screen on
 	tizen.power.setScreenStateChangeListener(function(oldState, newState) {
 		if (newState !== "SCREEN_BRIGHT" || !tizen.power.isScreenOn()) {
 			tizen.power.turnScreenOn();
@@ -43,109 +31,90 @@ window.onload = function() {
 	});
 };
 
-// variables
-var ppgSensor, linearAccelerationSensor, lightSensor;
-var listenerIdWalking, listenerIdRunning, listenerIdStationary;
-var statusText;
-var localDataSizeText;
-var appStatus = false;
-var appVibrate = false;
-var uploading = false;
-var documentsDir;
+// sensor event handlers
+function saveRRIntervalSample(hrmInfo) {
+	var file = tizen.filesystem.openFile("documents/" + rrIntervalFilename, "a");
+	file.writeString(rrIntervalDataSource + ',' + new Date().getTime() + ',' + hrmInfo.rRInterval + '\n');
+	file.close();
 
-function startHeartRateCollection() {
-	appStatus = true;
-	tizen.humanactivitymonitor.start('HRM', function(hrmInfo) {
-		var timestamp = new Date().getTime();
-		saveRRIntervalSample(timestamp + ',' + hrmInfo.rRInterval);
-		saveHeartRateSample(timestamp + ',' + hrmInfo.heartRate);
-		if (hrmInfo.heartRate <= 0) {
-			tizen.application.launch("WGvCVP8H7a.SAPTizenClient");
-		}
-	}, function(error) {
-		// console.log('error : ' + error);
-	});
-	// console.log('HRM started');
+	var timestamp = new Date().getTime();
+	if (timestamp - rrIntervalLastSyncTimestamp > BACKUP_CHECK_DELAY) {
+		backupRRInterval(timestamp);
+		rrIntervalLastSyncTimestamp = timestamp;
+	}
+}
+function savePPGSample(ppgData) {
+	var file = tizen.filesystem.openFile("documents/" + ppgFilename, "a");
+	file.writeString(ppgDataSource + ',' + new Date().getTime() + ',' + ppgData.lightIntensity + '\n');
+	file.close();
+
+	var timestamp = new Date().getTime();
+	if (timestamp - ppgLastSyncTimestamp > BACKUP_CHECK_DELAY) {
+		backupPPG(timestamp);
+		ppgLastSyncTimestamp = timestamp;
+	}
+}
+function saveAccelerometerSample(accData) {
+	var file = tizen.filesystem.openFile("documents/" + accelerometerFilename, "a");
+	file.writeString(accelerometerDataSource + ',' + new Date().getTime() + ',' + accData.x + ',' + accData.y + ',' + accData.z + '\n');
+	file.close();
+
+	var timestamp = new Date().getTime();
+	if (timestamp - accelerometerLastSyncTimestamp > BACKUP_CHECK_DELAY) {
+		backupAccelerometer(timestamp);
+		accelerometerLastSyncTimestamp = timestamp;
+	}
+}
+
+// sensor data backup events
+function backupRRInterval(timestamp) {
+	tizen.filesystem.copyFile("documents/" + rrIntervalFilename, "documents/" + timestamp.toString() + rrIntervalFilename);
+	tizen.filesystem.openFile("documents/" + rrIntervalFilename, "w").close();
+}
+function backupPPG(timestamp) {
+	tizen.filesystem.copyFile("documents/" + ppgFilename, "documents/" + timestamp.toString() + ppgFilename);
+	tizen.filesystem.openFile("documents/" + ppgFilename, "w").close();
+}
+function backupAccelerometer(timestamp) {
+	tizen.filesystem.copyFile("documents/" + accelerometerFilename, "documents/" + timestamp.toString() + accelerometerFilename);
+	tizen.filesystem.openFile("documents/" + accelerometerFilename, "w").close();
+}
+
+// trigger sensing
+function startInterbeatIntervalCollection() {
+	tizen.humanactivitymonitor.start('HRM', saveRRIntervalSample, function(error) { });
 }
 function startHRMRawCollection() {
-	ppgSensor = tizen.sensorservice.getDefaultSensor("HRM_RAW");
+	var ppgSensor = tizen.sensorservice.getDefaultSensor("HRM_RAW");
 	ppgSensor.start(function() {
-		var listener = function(ppgData) {
-			var timestamp = new Date().getTime();
-			savePPGSample(timestamp + "," + ppgData.lightIntensity);
-		};
-		var onerror = function() {
-			// console.log("error occurred:" + error);
-		};
-
-		ppgSensor.getHRMRawSensorData(listener, onerror);
-		ppgSensor.setChangeListener(listener, 10);
-	}, function(error) {
-		// console.log('error : ' + error.message);
-	});
-	// console.log('HRM Raw collection started');
+		ppgSensor.getHRMRawSensorData(savePPGSample, function(error) { });
+		ppgSensor.setChangeListener(savePPGSample, 10);
+	}, function(error) { });
 }
 function startLinearAccelerationCollection() {
-	linearAccelerationSensor = tizen.sensorservice
-			.getDefaultSensor("LINEAR_ACCELERATION");
+	var linearAccelerationSensor = tizen.sensorservice.getDefaultSensor("LINEAR_ACCELERATION");
 	linearAccelerationSensor.start(function() {
-		var listener = function(accData) {
-			var timestamp = new Date().getTime();
-			saveAccelerometerSample(timestamp + "," + accData.x + ","
-					+ accData.y + "," + accData.z);
-		};
-		var onerror = function(error) {
-			// console.log('error : ' + error);
-		};
-		linearAccelerationSensor.getLinearAccelerationSensorData(listener,
-				onerror);
-		linearAccelerationSensor.setChangeListener(listener, 50);
+		linearAccelerationSensor.getLinearAccelerationSensorData(saveAccelerometerSample, function(error) { });
+		linearAccelerationSensor.setChangeListener(saveAccelerometerSample, 10);
 	});
-	// console.log('Linear acc collection started');
 }
-function startAmbientLightCollection() {
-	lightSensor = tizen.sensorservice.getDefaultSensor("LIGHT");
-	lightSensor.start(function() {
-		var listener = function(lightData) {
-			var timestamp = new Date().getTime();
-			saveAmbientLightSample(timestamp + "," + lightData.lightLevel);
-		};
-		var onerror = function(error) {
-			// console.log('error : ' + error);
-		};
-		lightSensor.getLightSensorData(listener, onerror);
-		lightSensor.setChangeListener(listener, 1000);
-	});
-	// console.log('Ambient light sensor start');
-}
-function startActivityDetection() {
-	var listener = function(activityInfo) {
-		// console.log('Activity');
-		var timestamp = new Date().getTime();
-		saveActivitySample(timestamp + "," + activityInfo.type);
-	};
-	var onerror = function(error) {
-		// console.log('error : ' + error.message);
-	};
-	listenerIdWalking = tizen.humanactivitymonitor
-			.addActivityRecognitionListener('WALKING', listener, onerror);
-	listenerIdWalking = tizen.humanactivitymonitor
-			.addActivityRecognitionListener('RUNNING', listener, onerror);
-	listenerIdWalking = tizen.humanactivitymonitor
-			.addActivityRecognitionListener('STATIONARY', listener, onerror);
-	listenerIdWalking = tizen.humanactivitymonitor
-			.addActivityRecognitionListener('IN_VEHICLE', listener, onerror);
-}
-// sensing overall
 function startSensing() {
-	startHeartRateCollection();
+	startInterbeatIntervalCollection();
 	startHRMRawCollection();
 	startLinearAccelerationCollection();
-	startAmbientLightCollection();
-	startActivityDetection();
 }
 
-// GUI
+// utility
+function compareFiles(a, b) {
+	if (a.name < b.name)
+		return -1;
+	else if (a.name > b.name)
+		return 1;
+	else
+		return 0;
+}
+
+// GUI event handlers
 function aboutClick() {
 	alert("It collects health and behavioral data for a stress sensing study. Have a nice day =)");
 }
@@ -153,7 +122,7 @@ function exitApp() {
 	tizen.application.getCurrentApplication().exit();
 }
 function checkDataSize() {
-	documentsDir.listFiles(function(files) {
+	tizen.filesystem.listDirectory('documents', function(files) {
 		var count = 0;
 		for (var i = 0; i < files.length; i++) {
 			if (/^\d+.+\.sosw$/.test(files[i].name))
@@ -164,31 +133,10 @@ function checkDataSize() {
 		// console.log('error : ' + error);
 	});
 }
-
-function uploadSuccess(r) {
-	console.log('Code = ' + r.responseCode);
-	console.log('Response = ' + r.response);
-	console.log('Sent = ' + r.bytesSent);
-};
-function uploadFailure(error) {
-	alert('An error has occurred: Code = ' + error.code);
-	console.log('upload error source ' + error.source);
-	console.log('upload error target ' + error.target);
-};
-
-function compareFiles(a, b) {
-	if (a.name < b.name)
-		return -1;
-	else if (a.name > b.name)
-		return 1;
-	else
-		return 0;
-}
-
 function uploadData() {
 	if (!uploading) {
 		uploading = true;
-		documentsDir.listFiles(function(files) {
+		tizen.filesystem.listDirectory('documents', function(files) {
 			files.sort(compareFiles);
 			for (var i = 0; i < files.length; i++) {
 				var formData = new FormData();
@@ -196,7 +144,7 @@ function uploadData() {
 				var fileContent = file.readString();
 				file.close();
 				formData.append(files[i].name, fileContent);
-				
+
 				jQuery.ajax({
 					url : 'http://165.246.42.172/api/submit_data',
 					data : formData,
@@ -206,15 +154,13 @@ function uploadData() {
 					method : 'POST',
 					type : 'POST',
 					success : function(res) {
-						alert(res);
-						uploading = false;
-					}
+						alert(res.success);
+					},
+					error: function (req, status, err) { }
 				});
-				
-				break;
 			}
+			uploading = false;
 		}, function(error) {
-			// console.log('error : ' + error);
 			uploading = false;
 		});
 	}
