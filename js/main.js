@@ -2,9 +2,9 @@
 const BACKUP_CHECK_DELAY = 10 * 60000;
 var userId = null;
 var timestamp = new Date().getTime();
-var rrIntervalFilename = 'rrInterval.csv', rrIntervalDataSource = 41, rrIntervalLastSyncTimestamp = timestamp;
-var ppgFilename = 'ppgLightIntensity.csv', ppgDataSource = 43, ppgLastSyncTimestamp = timestamp;
-var accelerometerFilename = 'accelerometer.csv', accelerometerDataSource = 42, accelerometerLastSyncTimestamp = timestamp;
+var rrIntervalFilename = 'rrInterval.csv', rrIntervalDataSource = 1, rrIntervalLastSyncTimestamp = timestamp;
+var ppgFilename = 'ppgLightIntensity.csv', ppgDataSource = 2, ppgLastSyncTimestamp = timestamp;
+var accelerometerFilename = 'accelerometer.csv', accelerometerDataSource = 3, accelerometerLastSyncTimestamp = timestamp;
 var uploading = false;
 
 // init
@@ -14,30 +14,6 @@ window.onload = function() {
 			tizen.application.getCurrentApplication().hide();
 	});
 	
-	// acquire permissions and start data collection
-	tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage", function() {
-		// check user ID
-		var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
-		var fileContent = file.readString();
-		if (fileContent.length === 0) {
-			alert('User ID is unset, please set it first!');
-			var newUserId = window.prompt("User ID: ");
-			if (/^\d+$/.test(newUserId)) {
-				file.writeString(newUserId);
-				userId = parseInt(newUserId);
-				alert("User ID(" + newUserId + ") is set!");
-			} else
-				tizen.application.getCurrentApplication().exit();
-		} else
-			userId = parseInt(fileContent);
-		file.close();
-		
-		if (userId != null) {
-			$('#userIdText').html('Current user ID : ' + userId);
-			tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) { });
-		}
-	}, function(error) { });
-
 	// hold the CPU lock
 	tizen.power.request("CPU", "CPU_AWAKE");
 	tizen.power.request("SCREEN", "SCREEN_NORMAL");
@@ -48,6 +24,27 @@ window.onload = function() {
 			tizen.power.turnScreenOn();
 			tizen.power.setScreenBrightness(1);
 		}
+	});
+	
+	// acquire permissions and start data collection
+	tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage", function() {
+		// check user ID
+		var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
+		var fileContent = file.readString();
+		file.close();
+		if (fileContent.length > 0 && /^\d+$/.test(fileContent)) {
+			userId = parseInt(fileContent);
+			
+			$('#userIdText').html('Current user ID : ' + userId + ' (LOGOUT)');
+			$('#registerDiv').hide(500);
+			$('#contentDiv').show(500);
+			
+			tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) {
+				tizen.application.getCurrentApplication().exit();
+			});
+		}
+	}, function(error) {
+		tizen.application.getCurrentApplication().exit();
 	});
 };
 
@@ -125,20 +122,90 @@ function startSensing() {
 }
 
 // GUI event handlers
-function setUserId() {
-	var newUserId = window.prompt("User ID: ");
-	if (/^\d+$/.test(newUserId)) {
-		var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
-		file.writeString(newUserId);
-		file.close();
-		userId = parseInt(newUserId);
-		$('#userIdText').html('Current user ID : ' + userId);
-		alert("User ID(" + newUserId + ") is set!");
-	} else
-		alert("User ID must be numeric");
+function logout() {
+	$('#contentDiv').hide(500);
+	$('#registerDiv').show(500);
 }
 function exitApp() {
 	tizen.application.getCurrentApplication().exit();
+}
+function login() {
+	$('#loginButton').css('background-color', 'gray');
+	var newUserId = window.prompt("User ID: ");
+	if (/^\d+$/.test(newUserId)) {
+		var formData = new FormData();
+		formData.append('userId', newUserId);
+		
+		jQuery.ajax({
+			url : 'http://165.246.42.172/api/login',
+			data : formData,
+			cache : false,
+			contentType : false,
+			processData : false,
+			method : 'POST',
+			type : 'POST',
+			success : function(res) {
+				if (res.success) {
+					var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
+					file.writeString(res.userId.toString());
+					file.close();
+					userId = res.userId;
+					
+					$('#userIdText').html('Current user ID : ' + userId + ' (LOGOUT)');
+					$('#registerDiv').hide(500);
+					$('#contentDiv').show(500);
+					
+					tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) {
+						tizen.application.getCurrentApplication().exit();
+					});
+				} else
+					alert("Please double check your User ID!");
+				$('#loginButton').css('background-color', 'green');					
+			},
+			error: function (req, status, err) {
+				$('#loginButton').css('background-color', 'green');
+				alert("Please recheck your internet connection!");
+			}
+		});
+	}
+}
+function register() {
+	$('#registerButton').css('background-color', 'gray');
+	jQuery.ajax({
+		url : 'http://165.246.42.172/api/register',
+		data : new FormData(),
+		cache : false,
+		contentType : false,
+		processData : false,
+		method : 'POST',
+		type : 'POST',
+		success : function(res) {
+			if (res.success) {
+				tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage", function() {
+					var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
+					file.writeString(res.userId.toString());
+					file.close();
+					userId = res.userId;
+					
+					$('#userIdText').html('Current user ID : ' + userId + ' (LOGOUT)');
+					$('#registerDiv').hide(500);
+					$('#contentDiv').show(500);
+					
+					tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) {
+						tizen.application.getCurrentApplication().exit();
+					});
+					
+					$('#registerButton').css('background-color', 'green');
+				}, function(error) {
+					tizen.application.getCurrentApplication().exit();
+				});
+			}
+		},
+		error: function (req, status, err) {
+			$('#registerButton').css('background-color', 'green');
+			alert("Please recheck your internet connection!");
+		}
+	});
 }
 function checkDataSize() {
 	$('#localDataButton').css('background-color', 'gray');
@@ -161,10 +228,12 @@ function uploadData() {
 			files.sort();
 			for (var i = 0; i < files.length; i++)
 				if (/^\d+[a-zA-Z]+\.csv$/.test(files[i])) {
-					var formData = new FormData();
 					var file = tizen.filesystem.openFile("documents/" + files[i], "rw");
 					var fileContent = file.readString();
 					file.close();
+					
+					var formData = new FormData();
+					formData.append('userId', userId);
 					formData.append(files[i], fileContent);
 	
 					jQuery.ajax({
@@ -175,7 +244,13 @@ function uploadData() {
 						processData : false,
 						method : 'POST',
 						type : 'POST',
-						success : function(res) { },
+						success : function(res) {
+							if (res.success)
+								for (var i = 0; i < res.fileNames.length; i++) {
+									tizen.filesystem.deleteFile('documents/' + res.fileNames[i]);
+									console.log(res.fileNames[i] + ' deleted');
+								}
+						},
 						error: function (req, status, err) { }
 					});
 				}

@@ -10,16 +10,25 @@
 <title>Stress App</title>
 
 <link rel="stylesheet" type="text/css" href="css/style.css" />
-<script
-	src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+<script src="js/jquery.min.js"></script>
 <script src="js/main.js"></script>
 <script type="text/javascript" src="lib/lowBatteryCheck.js"></script>
 </head>
 
 <body>
-	<div id="content">
+	<div id="registerDiv">
+		<div>
+			<div>
+				<a class="button" id="loginButton" href="#" onclick="login();">LOGIN</a>
+			</div>
+			<div>
+				<a class="button" id="registerButton" href="#" onclick="register();">REGISTER</a>
+			</div>
+		</div>
+	</div>
+	<div id="contentDiv" style="display: none;">
 		<div style="text-align: center;">
-			<a id="userIdText" href="#" onclick="setUserId();"></a>
+			<a id="userIdText" href="#" onclick="logout();"></a>
 		</div>
 		<div>
 			<a class="button" id="localDataButton" href="#" onclick="checkDataSize();">LOCAL DATA</a>
