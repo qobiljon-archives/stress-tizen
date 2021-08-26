@@ -26,3 +26,8 @@ body {
 	text-align: center;
 	font-size: xx-large;
 }
+
+#userIdText {
+	text-decoration: none;
+	color: white;
+}

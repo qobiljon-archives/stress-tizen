@@ -18,11 +18,14 @@
 
 <body>
 	<div id="content">
-		<div>
-			<a class="button" href="#" onclick="checkDataSize();">LOCAL DATA</a>
+		<div style="text-align: center;">
+			<a id="userIdText" href="#" onclick="setUserId();"></a>
 		</div>
 		<div>
-			<a class="button" href="#" onclick="uploadData();">UPLOAD DATA</a>
+			<a class="button" id="localDataButton" href="#" onclick="checkDataSize();">LOCAL DATA</a>
+		</div>
+		<div>
+			<a class="button" id="uploadButton" href="#" onclick="uploadData();">UPLOAD DATA</a>
 		</div>
 		<div>
 			<a class="button" href="#" onclick="exitApp();">EXIT APP</a>

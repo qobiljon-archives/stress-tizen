@@ -1,5 +1,6 @@
 // variables
-const BACKUP_CHECK_DELAY = 60000;
+const BACKUP_CHECK_DELAY = 10 * 60000;
+var userId = null;
 var timestamp = new Date().getTime();
 var rrIntervalFilename = 'rrInterval.csv', rrIntervalDataSource = 41, rrIntervalLastSyncTimestamp = timestamp;
 var ppgFilename = 'ppgLightIntensity.csv', ppgDataSource = 43, ppgLastSyncTimestamp = timestamp;
@@ -12,10 +13,29 @@ window.onload = function() {
 		if (e.keyName == "back")
 			tizen.application.getCurrentApplication().hide();
 	});
-
+	
 	// acquire permissions and start data collection
 	tizen.ppm.requestPermission("http://tizen.org/privilege/mediastorage", function() {
-		tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) { });
+		// check user ID
+		var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
+		var fileContent = file.readString();
+		if (fileContent.length === 0) {
+			alert('User ID is unset, please set it first!');
+			var newUserId = window.prompt("User ID: ");
+			if (/^\d+$/.test(newUserId)) {
+				file.writeString(newUserId);
+				userId = parseInt(newUserId);
+				alert("User ID(" + newUserId + ") is set!");
+			} else
+				tizen.application.getCurrentApplication().exit();
+		} else
+			userId = parseInt(fileContent);
+		file.close();
+		
+		if (userId != null) {
+			$('#userIdText').html('Current user ID : ' + userId);
+			tizen.ppm.requestPermission("http://tizen.org/privilege/healthinfo", startSensing, function(error) { });
+		}
 	}, function(error) { });
 
 	// hold the CPU lock
@@ -104,63 +124,65 @@ function startSensing() {
 	startLinearAccelerationCollection();
 }
 
-// utility
-function compareFiles(a, b) {
-	if (a.name < b.name)
-		return -1;
-	else if (a.name > b.name)
-		return 1;
-	else
-		return 0;
-}
-
 // GUI event handlers
-function aboutClick() {
-	alert("It collects health and behavioral data for a stress sensing study. Have a nice day =)");
+function setUserId() {
+	var newUserId = window.prompt("User ID: ");
+	if (/^\d+$/.test(newUserId)) {
+		var file = tizen.filesystem.openFile("documents/userId.txt", "rw");
+		file.writeString(newUserId);
+		file.close();
+		userId = parseInt(newUserId);
+		$('#userIdText').html('Current user ID : ' + userId);
+		alert("User ID(" + newUserId + ") is set!");
+	} else
+		alert("User ID must be numeric");
 }
 function exitApp() {
 	tizen.application.getCurrentApplication().exit();
 }
 function checkDataSize() {
+	$('#localDataButton').css('background-color', 'gray');
 	tizen.filesystem.listDirectory('documents', function(files) {
 		var count = 0;
-		for (var i = 0; i < files.length; i++) {
-			if (/^\d+.+\.sosw$/.test(files[i].name))
+		for (var i = 0; i < files.length; i++)
+			if (/^\d+[a-zA-Z]+\.csv$/.test(files[i]))
 				count += 1;
-		}
+		$('#localDataButton').css('background-color', 'green');
 		alert(count + ' files need to be transfered!');
 	}, function(error) {
-		// console.log('error : ' + error);
+		$('#localDataButton').css('background-color', 'green');
 	});
 }
 function uploadData() {
 	if (!uploading) {
+		$('#uploadButton').css('background-color', 'gray');
 		uploading = true;
 		tizen.filesystem.listDirectory('documents', function(files) {
-			files.sort(compareFiles);
-			for (var i = 0; i < files.length; i++) {
-				var formData = new FormData();
-				var file = tizen.filesystem.openFile("documents/" + files[i].name, "rw");
-				var fileContent = file.readString();
-				file.close();
-				formData.append(files[i].name, fileContent);
-
-				jQuery.ajax({
-					url : 'http://165.246.42.172/api/submit_data',
-					data : formData,
-					cache : false,
-					contentType : false,
-					processData : false,
-					method : 'POST',
-					type : 'POST',
-					success : function(res) {
-						alert(res.success);
-					},
-					error: function (req, status, err) { }
-				});
-			}
+			files.sort();
+			for (var i = 0; i < files.length; i++)
+				if (/^\d+[a-zA-Z]+\.csv$/.test(files[i])) {
+					var formData = new FormData();
+					var file = tizen.filesystem.openFile("documents/" + files[i], "rw");
+					var fileContent = file.readString();
+					file.close();
+					formData.append(files[i], fileContent);
+	
+					jQuery.ajax({
+						url : 'http://165.246.42.172/api/submit_data',
+						data : formData,
+						cache : false,
+						contentType : false,
+						processData : false,
+						method : 'POST',
+						type : 'POST',
+						success : function(res) { },
+						error: function (req, status, err) { }
+					});
+				}
+			$('#uploadButton').css('background-color', 'green');
 			uploading = false;
 		}, function(error) {
+			$('#uploadButton').css('background-color', 'green');
 			uploading = false;
 		});
 	}
